@@ -33,7 +33,7 @@ namespace Labyrinth
                 {
                     await bag.TryMoveItemsFrom(
                         roomContent, 
-                        roomContent.ItemTypes.Select(_ => true).ToList()
+                        (await roomContent.ListItemTypesAsync()).Select(_ => true).ToList()
                     );
                     changeEvent = PositionChanged;
                 }

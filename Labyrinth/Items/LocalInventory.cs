@@ -14,7 +14,7 @@
         /// operation succeeds; otherwise, <see langword="false"/>.</returns>
         public void MoveFirst(LocalInventory from)
         {
-            if (!TryMoveItemsFrom(from, from.ItemTypes.Select((_, i) => i == 0).ToList()).Result)
+            if (!TryMoveItemsFrom(from, from.ListItemTypesAsync().Result.Select((_, i) => i == 0).ToList()).Result)
             {
                 throw new ArgumentException("Specified source inventory may be empty.");
             }
@@ -35,6 +35,11 @@
                     _items.Add(other._items[i]);
                     other._items.RemoveAt(i);
                 }
+            }
+            if (ok)
+            {
+                _version++;
+                other._version++;
             }
             return Task.FromResult(ok);
         }

@@ -101,7 +101,7 @@ namespace Labyrinth.ApiClient
                 var newCount = (await response.Content.ReadFromJsonAsync<Dto.InventoryItem[]>())?.Length ?? 0;
 
                 from.UpdateList(newCount);
-                to.UpdateList(to.ItemTypes.Count() + movesRequired.Count - newCount);
+                to.UpdateList((await to.ListItemTypesAsync()).Count + movesRequired.Count - newCount);
                 return true;
             }
             return false;
@@ -116,6 +116,12 @@ namespace Labyrinth.ApiClient
         private class RemoteInventory(ClientCrawler parent, string type) : Inventory
         {
             public string TypeName { get; init; } = type;
+
+            public override async Task<IReadOnlyList<Type>> ListItemTypesAsync()
+            {
+                await _parent.UpdateRemote();
+                return await base.ListItemTypesAsync();
+            }
   
             public override async Task<bool> TryMoveItemsFrom(Inventory from, IList<bool> movesRequired)
             {
@@ -128,10 +134,21 @@ namespace Labyrinth.ApiClient
 
             public void UpdateList(int itemCount)
             {
+                var changed = false;
                 while(_items.Count > itemCount)
+                {
                     _items.RemoveAt(_items.Count - 1);
+                    changed = true;
+                }
                 while(_items.Count < itemCount)
+                {
                     _items.Add(new Key()); 
+                    changed = true;
+                }
+                if (changed)
+                {
+                    _version++;
+                }
             }
 
             private ClientCrawler _parent = parent;

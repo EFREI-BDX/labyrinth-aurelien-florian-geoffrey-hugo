@@ -251,7 +251,7 @@ public class LabyrinthCrawlerTest
 
         Assert.That(inventory, Is.Not.Null);
         Assert.That(inventory?.HasItems, Is.True);
-        Assert.That(inventory?.ItemTypes.First(), Is.EqualTo(typeof(Key)));
+        Assert.That((await inventory!.ListItemTypesAsync()).First(), Is.EqualTo(typeof(Key)));
     }
 
     [Test]
@@ -296,6 +296,27 @@ public class LabyrinthCrawlerTest
         Assert.That(test.Y, Is.EqualTo(2));
         Assert.That(test.Direction, Is.EqualTo(Direction.South));
         Assert.That(test.FacingTileType.Result, Is.EqualTo(typeof(Outside)));
+    }
+
+    [Test]
+    public async Task WalkOnAlreadyOpenedDoorDoesNotThrowAndPasses()
+    {
+        var laby = NewLabyrinth("""
+                +--+
+                |xk|
+                +-/|
+                """);
+        var test = laby.NewCrawler();
+
+        test.Direction.TurnRight();
+        var bag = await test.TryWalk(new MyInventory());
+        Assert.That(bag, Is.Not.Null);
+
+        test.Direction.TurnRight();
+
+        Assert.That(async () => await test.TryWalk(bag!), Throws.Nothing);
+        Assert.That(test.X, Is.EqualTo(2));
+        Assert.That(test.Y, Is.EqualTo(2));
     }
     #endregion
 }

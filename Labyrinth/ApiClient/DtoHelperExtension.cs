@@ -11,7 +11,7 @@ namespace Labyrinth.ApiClient
                 (Dto.Direction)(dir.DeltaY + 1 + dir.DeltaX * (dir.DeltaX - 1));
 
         public static Dto.InventoryItem[] GetApiInventoryItems(this Inventory content) =>
-            [.. content.ItemTypes.Select(type => new Dto.InventoryItem
+            [.. content.ListItemTypesAsync().Result.Select(type => new Dto.InventoryItem
             {
                 Type = Dto.ItemType.Key
             })];

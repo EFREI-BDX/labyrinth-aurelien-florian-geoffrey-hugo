@@ -23,7 +23,10 @@ namespace Labyrinth
 
                     if (tile is Door door)
                     {
-                        Open(door, walkerInventory);
+                        if (door.IsLocked)
+                        {
+                            Open(door, walkerInventory);
+                        }
                     }
                     if (tile.IsTraversable)
                     {
@@ -40,7 +43,7 @@ namespace Labyrinth
                 {
                     throw new NotSupportedException("Local inventories only");
                 }
-                for(var maxKeys = walkerInventory.ItemTypes.Count(); maxKeys > 0; maxKeys--)
+                for(var maxKeys = walkerInventory.ListItemTypesAsync().Result.Count; maxKeys > 0; maxKeys--)
                 {
                     if (door.Open(keyRing))
                     {

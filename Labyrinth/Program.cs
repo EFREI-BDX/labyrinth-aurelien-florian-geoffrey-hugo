@@ -38,7 +38,7 @@ void DrawExplorer(object? sender, CrawlingEventArgs e)
     Console.SetCursorPosition(0, 0);
     if(crawler is ClientCrawler cc)
     {
-        Console.WriteLine($"Bag : { cc.Bag.ItemTypes.Count() } item(s)");
+        Console.WriteLine($"Bag : { cc.Bag.ListItemTypesAsync().Result.Count } item(s)");
     }
     Thread.Sleep(100);
 }

@@ -12,6 +12,7 @@
             {
                 _items.Add(item);
             }
+            _version = _items.Count;
         }
 
         /// <summary>
@@ -23,6 +24,43 @@
         /// Gets the type of the item in the room.
         /// </summary>
         public IEnumerable<Type> ItemTypes => _items.Select(item => item.GetType());
+
+        public virtual Task<IReadOnlyList<Type>> ListItemTypesAsync() =>
+            Task.FromResult((IReadOnlyList<Type>)ItemTypes.ToList());
+
+        public virtual Task<(IReadOnlyList<Type> Types, int Version)> ListItemTypesWithVersionAsync() =>
+            Task.FromResult(((IReadOnlyList<Type>)ItemTypes.ToList(), _version));
+
+        public virtual Task<int> GetVersionAsync() =>
+            Task.FromResult(_version);
+
+        public virtual async Task<bool> TryMoveItemsFrom(
+            Inventory source,
+            IList<bool> movesRequired,
+            int expectedSourceVersion
+        )
+        {
+            if (await source.GetVersionAsync() != expectedSourceVersion)
+            {
+                return false;
+            }
+            return await TryMoveItemsFrom(source, movesRequired);
+        }
+
+        public virtual async Task<bool> TryTakeItemFromAsync(
+            Inventory source,
+            int itemIndex,
+            int expectedSourceVersion
+        )
+        {
+            var types = await source.ListItemTypesAsync();
+            if (itemIndex < 0 || itemIndex >= types.Count)
+            {
+                return false;
+            }
+            var movesRequired = types.Select((_, i) => i == itemIndex).ToList();
+            return await TryMoveItemsFrom(source, movesRequired, expectedSourceVersion);
+        }
 
         /// <summary>
         /// Attempts to move selected items from the specified source inventory to the current inventory.
@@ -41,5 +79,7 @@
         );
 
         protected List<ICollectable> _items = new ();
+
+        protected int _version;
     }
 }
