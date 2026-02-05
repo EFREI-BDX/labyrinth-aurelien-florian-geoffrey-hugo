@@ -1,0 +1,134 @@
+name: .NET CI/CD
+
+on:
+  push:
+    branches: [ main ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ main ]
+
+env:
+  DOTNET_VERSION: '10.0.x'
+
+jobs:
+  # JOB 1: Build et Tests
+  build-and-test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout du code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET ${{ env.DOTNET_VERSION }}
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restauration des dépendances
+        run: dotnet restore Labyrinth.sln
+
+      - name: Build de la solution
+        run: dotnet build Labyrinth.sln --no-restore --configuration Release
+
+      - name: Exécution des tests
+        run: dotnet test Labyrinth.sln --no-build --configuration Release --verbosity normal --logger "trx;LogFileName=test-results.trx"
+
+      - name: Upload des résultats de tests
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: '**/TestResults/*.trx'
+          retention-days: 30
+
+      - name: Upload des artefacts de build
+        uses: actions/upload-artifact@v4
+        with:
+          name: labyrinth-build
+          path: Labyrinth/bin/Release/net10.0/
+          retention-days: 30
+
+  # JOB 2: Release (sur tag v*)
+  release:
+    name: Create Release
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - name: Checkout du code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET ${{ env.DOTNET_VERSION }}
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restauration des dépendances
+        run: dotnet restore Labyrinth.sln
+
+      - name: Publish Linux x64
+        run: |
+          dotnet publish Labyrinth/Labyrinth.csproj \
+            --configuration Release \
+            --runtime linux-x64 \
+            --self-contained true \
+            --output ./publish/linux-x64 \
+            -p:PublishSingleFile=true \
+            -p:IncludeNativeLibrariesForSelfExtract=true
+
+      - name: Publish Windows x64
+        run: |
+          dotnet publish Labyrinth/Labyrinth.csproj \
+            --configuration Release \
+            --runtime win-x64 \
+            --self-contained true \
+            --output ./publish/win-x64 \
+            -p:PublishSingleFile=true \
+            -p:IncludeNativeLibrariesForSelfExtract=true
+
+      - name: Publish macOS x64
+        run: |
+          dotnet publish Labyrinth/Labyrinth.csproj \
+            --configuration Release \
+            --runtime osx-x64 \
+            --self-contained true \
+            --output ./publish/osx-x64 \
+            -p:PublishSingleFile=true \
+            -p:IncludeNativeLibrariesForSelfExtract=true
+
+      - name: Création des archives
+        run: |
+          cd publish
+          zip -r ../Labyrinth-linux-x64.zip linux-x64/
+          zip -r ../Labyrinth-win-x64.zip win-x64/
+          zip -r ../Labyrinth-osx-x64.zip osx-x64/
+
+      - name: Création de la release GitHub
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Release ${{ github.ref_name }}
+          body: |
+            ## 🎮 Labyrinth Release ${{ github.ref_name }}
+
+            ### 📦 Téléchargements
+
+            | Plateforme | Fichier |
+            |------------|---------|
+            | 🐧 Linux x64 | `Labyrinth-linux-x64.zip` |
+            | 🪟 Windows x64 | `Labyrinth-win-x64.zip` |
+            | 🍎 macOS x64 | `Labyrinth-osx-x64.zip` |
+
+            ### 📝 Notes
+            - Binaires self-contained (pas besoin d'installer .NET)
+            - Fichier unique exécutable par plateforme
+          files: |
+            Labyrinth-linux-x64.zip
+            Labyrinth-win-x64.zip
+            Labyrinth-osx-x64.zip
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
