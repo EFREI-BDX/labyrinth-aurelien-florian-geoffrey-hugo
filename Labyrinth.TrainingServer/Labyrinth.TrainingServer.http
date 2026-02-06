@@ -1,0 +1,53 @@
+@Labyrinth.TrainingServer_HostAddress = http://localhost:5297
+@appKey = 00000000-0000-0000-0000-000000000001
+
+### Create a new crawler
+POST {{Labyrinth.TrainingServer_HostAddress}}/crawlers?appKey={{appKey}}
+Content-Type: application/json
+
+{}
+
+### Get all crawlers
+GET {{Labyrinth.TrainingServer_HostAddress}}/crawlers?appKey={{appKey}}
+Accept: application/json
+
+### Get a specific crawler (replace {crawlerId} with actual ID)
+# GET {{Labyrinth.TrainingServer_HostAddress}}/crawlers/{crawlerId}?appKey={{appKey}}
+# Accept: application/json
+
+### Update crawler - Turn East
+# PATCH {{Labyrinth.TrainingServer_HostAddress}}/crawlers/{crawlerId}?appKey={{appKey}}
+# Content-Type: application/json
+#
+# {
+#   "direction": "East",
+#   "walking": false
+# }
+
+### Update crawler - Walk forward
+# PATCH {{Labyrinth.TrainingServer_HostAddress}}/crawlers/{crawlerId}?appKey={{appKey}}
+# Content-Type: application/json
+#
+# {
+#   "direction": "East",
+#   "walking": true
+# }
+
+### Get crawler bag
+# GET {{Labyrinth.TrainingServer_HostAddress}}/crawlers/{crawlerId}/bag?appKey={{appKey}}
+# Accept: application/json
+
+### Get items on current tile
+# GET {{Labyrinth.TrainingServer_HostAddress}}/crawlers/{crawlerId}/items?appKey={{appKey}}
+# Accept: application/json
+
+### Pick up item from ground
+# PUT {{Labyrinth.TrainingServer_HostAddress}}/crawlers/{crawlerId}/items?appKey={{appKey}}
+# Content-Type: application/json
+#
+# [
+#   { "type": "Key", "move-required": true }
+# ]
+
+### Delete crawler
+# DELETE {{Labyrinth.TrainingServer_HostAddress}}/crawlers/{crawlerId}?appKey={{appKey}}
