@@ -4,9 +4,10 @@
 
 ```
 Labyrinth.sln
-├── Labyrinth/          # Application console principale
-├── ApiTypes/           # Types et modèles partagés
-└── LabyrinthTest/      # Tests unitaires (NUnit)
+├── Labyrinth/                    # Application console (client)
+├── ApiTypes/                     # Types et modèles partagés (DTOs)
+├── Labyrinth.TrainingServer/     # Serveur d'entraînement local
+└── LabyrinthTest/                # Tests unitaires (NUnit)
 ```
 
 ## Prérequis
@@ -22,11 +23,83 @@ dotnet restore
 # Compiler le projet
 dotnet build
 
-# Lancer l'application
+# Lancer l'application client
 dotnet run --project Labyrinth
 
 # Lancer les tests
 dotnet test
+```
+
+---
+
+## Serveur d'Entraînement Local
+
+Le projet inclut un serveur d'entraînement pour permettre le développement et les tests en local.
+
+### Lancer le serveur
+
+```bash
+# Depuis la racine du projet
+dotnet run --project Labyrinth.TrainingServer
+
+# Ou avec une URL spécifique
+dotnet run --project Labyrinth.TrainingServer --urls "http://localhost:5297"
+```
+
+Le serveur démarre sur `http://localhost:5297` par défaut.
+
+### Endpoints disponibles
+
+| Méthode | Route | Description |
+|---------|-------|-------------|
+| `GET` | `/crawlers?appKey={guid}` | Liste tous les crawlers de l'appKey |
+| `POST` | `/crawlers?appKey={guid}` | Crée un nouveau crawler (max 3) |
+| `GET` | `/crawlers/{id}?appKey={guid}` | Récupère un crawler spécifique |
+| `PATCH` | `/crawlers/{id}?appKey={guid}` | Met à jour direction/mouvement |
+| `DELETE` | `/crawlers/{id}?appKey={guid}` | Supprime un crawler |
+| `GET` | `/crawlers/{id}/bag?appKey={guid}` | Récupère l'inventaire du bag |
+| `PUT` | `/crawlers/{id}/bag?appKey={guid}` | Transfère items du bag vers le sol |
+| `GET` | `/crawlers/{id}/items?appKey={guid}` | Récupère les items sur la tuile |
+| `PUT` | `/crawlers/{id}/items?appKey={guid}` | Ramasse des items du sol |
+
+### Tester avec curl
+
+```bash
+# Définir l'appKey (n'importe quel GUID valide)
+APP_KEY="00000000-0000-0000-0000-000000000001"
+BASE_URL="http://localhost:5297"
+
+# Créer un crawler
+curl -X POST "$BASE_URL/crawlers?appKey=$APP_KEY" \
+     -H "Content-Type: application/json" \
+     -d '{}'
+
+# Lister tous les crawlers
+curl "$BASE_URL/crawlers?appKey=$APP_KEY"
+
+# Récupérer un crawler (remplacer {id} par l'ID retourné)
+curl "$BASE_URL/crawlers/{id}?appKey=$APP_KEY"
+
+# Tourner vers l'Est
+curl -X PATCH "$BASE_URL/crawlers/{id}?appKey=$APP_KEY" \
+     -H "Content-Type: application/json" \
+     -d '{"direction": "East", "walking": false}'
+
+# Avancer (walking = true)
+curl -X PATCH "$BASE_URL/crawlers/{id}?appKey=$APP_KEY" \
+     -H "Content-Type: application/json" \
+     -d '{"direction": "East", "walking": true}'
+
+# Ramasser une clé sur le sol
+curl -X PUT "$BASE_URL/crawlers/{id}/items?appKey=$APP_KEY" \
+     -H "Content-Type: application/json" \
+     -d '[{"type": "Key", "move-required": true}]'
+
+# Voir le contenu du bag
+curl "$BASE_URL/crawlers/{id}/bag?appKey=$APP_KEY"
+
+# Supprimer un crawler
+curl -X DELETE "$BASE_URL/crawlers/{id}?appKey=$APP_KEY"
 ```
 
 ---
@@ -87,8 +160,6 @@ Ce job s'exécute uniquement lors d'un push de tag commençant par `v` (ex: `v1.
 | `Labyrinth-win-x64.zip` | Windows | Exécutable autonome |
 | `Labyrinth-osx-x64.zip` | macOS | Exécutable autonome |
 
-> **Note :** Les binaires sont self-contained, ce qui signifie qu'ils n'ont pas besoin de .NET installé sur la machine cible.
-
 ### Créer une nouvelle release
 
 Pour créer une nouvelle release du projet :
@@ -104,16 +175,4 @@ git tag v1.0.0
 # 3. Pousser le tag vers GitHub
 git push origin v1.0.0
 ```
-
-Le workflow GitHub Actions va automatiquement :
-1. Compiler le projet
-2. Exécuter les tests
-3. Créer les binaires pour Linux, Windows et macOS
-4. Publier une release GitHub avec les fichiers téléchargeables
-
-### Visualiser les résultats
-
-- **Statut des workflows** : Onglet "Actions" du dépôt GitHub
-- **Artefacts de build** : Dans le détail de chaque run de workflow
-- **Releases** : Onglet "Releases" du dépôt GitHub
 
