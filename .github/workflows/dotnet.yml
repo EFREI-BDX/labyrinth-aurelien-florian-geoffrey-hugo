@@ -2,11 +2,11 @@ name: .NET CI/CD
 
 on:
   push:
-    branches: [ main ]
+    branches: [ master ]
     tags:
       - 'v*'
   pull_request:
-    branches: [ main ]
+    branches: [ master ]
 
 env:
   DOTNET_VERSION: '10.0.x'
