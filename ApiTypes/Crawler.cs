@@ -8,6 +8,7 @@ namespace ApiTypes
     public class Crawler
     {
         /// <summary>The unique identifier of the crawler.</summary>
+        [JsonPropertyName("id")]
         public Guid Id { get; set; }
 
         /// <summary>The horizontal position of the crawler on the map.</summary>
@@ -23,6 +24,7 @@ namespace ApiTypes
         public Direction Dir { get; set; }
 
         /// <summary>A value indicating whether the crawler is currently walking. Set to <see langword="true"/> if walking; otherwise, <see langword="false"/>.</summary>
+        [JsonPropertyName("walking")]
         public bool Walking { get; set; }
 
         /// <summary>The type of tile the crawler is currently facing.</summary>
@@ -30,9 +32,11 @@ namespace ApiTypes
         public TileType FacingTile { get; set; }
 
         /// <summary>An optional list of items currently held in the crawler's bag. Can be empty but not null.</summary>
+        [JsonPropertyName("bag")]
         public InventoryItem[]? Bag { get; set; }
 
         /// <summary>An optional list of items present at the crawler's current location. Can be empty but not null.</summary>
+        [JsonPropertyName("items")]
         public InventoryItem[]? Items { get; set; }
     }
 
