@@ -10,11 +10,12 @@ namespace ApiTypes
         /// <summary>
         /// The type of the item.
         /// </summary>
+        [JsonPropertyName("type")]
         public ItemType Type { get; init; }
 
         /// <summary>
-        /// Indicates whether a move is required for the item. 
-        /// Set to <see langword="true"/> if a move is required; <see langword="false"/> 
+        /// Indicates whether a move is required for the item.
+        /// Set to <see langword="true"/> if a move is required; <see langword="false"/>
         /// or <see langword="null"/> or missing if not.
         /// </summary>
         [JsonPropertyName("move-required")]
