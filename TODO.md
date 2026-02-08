@@ -26,7 +26,8 @@
 | 2.2 | Items: `Key`, `Inventory`, `ICollectable` | [x] |
 | 2.3 | `Position`, `Direction` | [x] |
 | 2.4 | Interfaces: `ICrawler`, `IBuilder`, `IPathfinder` | [x] |
-| 2.5 | Interfaces manquantes: `IExplorationStrategy`, `ISharedMap`, `IMazeClient` | [ ] |
+| 2.5 | Interface: `IExplorer` pour strategies d'exploration | [x] |
+| 2.6 | Interfaces manquantes: `ISharedMap`, `IMazeClient` | [ ] |
 
 ---
 
@@ -59,7 +60,7 @@
 | # | Tache | Statut |
 |---|-------|--------|
 | 5.1 | Client API distant (`ContestSession`, `ClientCrawler`, DTOs) | [x] |
-| 5.2 | Arguments CLI (`--server`, `--appKey`, `--crawlers`) | [x] |
+| 5.2 | Arguments CLI (`--server`, `--appKey`, `--crawlers`, `--strategy`) | [x] |
 | 5.3 | Logging structure (info/debug) | [ ] |
 | 5.4 | Portes/cles - logique passage | [x] |
 | 5.5 | Strategie "garder cle pour sa porte" | [ ] |
@@ -84,10 +85,11 @@
 | # | Tache | Statut |
 |---|-------|--------|
 | 7.1 | Exploration aleatoire (`RandExplorer`) | [x] |
-| 7.2 | Frontier-based exploration (DFS/BFS) | [ ] |
+| 7.2 | BFS Frontier exploration (`BfsExplorer`) avec carte locale | [x] |
 | 7.3 | Strategie collective multi-agents | [ ] |
 | 7.4 | Attribution zones/frontieres | [ ] |
 | 7.5 | Eviter doublons exploration | [ ] |
+| 7.6 | Carte partagee entre crawlers | [ ] |
 
 ---
 
@@ -111,13 +113,14 @@
 |---|-------|--------|-------|
 | 9.1 | Tests Direction | [x] | 9 |
 | 9.2 | Tests LabyrinthCrawler | [x] | 15 |
-| 9.3 | Tests Explorer | [x] | 16 |
+| 9.3 | Tests Explorer (RandExplorer) | [x] | 16 |
 | 9.4 | Tests BFS Pathfinder | [x] | 31 |
 | 9.5 | Tests LabyrinthService | [x] | 14 |
 | 9.6 | Tests LabyrinthMap | [x] | 16 |
 | 9.7 | Tests CrawlerOrchestrator | [x] | 10 |
-| 9.8 | Tests concurrence (multi-threads, reservation) | [ ] | - |
-| 9.9 | Augmenter couverture tests | [~] | - |
+| 9.8 | Tests BfsExplorer | [x] | 11 |
+| 9.9 | Tests concurrence (multi-threads, reservation) | [ ] | - |
+| 9.10 | Augmenter couverture tests | [~] | - |
 
 ---
 
@@ -125,14 +128,15 @@
 
 ### Haute
 - [x] 6.1-6.4 Multi-Crawlers + CancellationToken
+- [x] 7.2 BfsExplorer avec carte locale
 - [ ] 4.3-4.5 SharedMap + Thread-Safety
-- [ ] 7.2-7.5 Strategies exploration avancees
+- [ ] 7.3-7.6 Strategies exploration avancees + carte partagee
 
 ### Moyenne
-- [x] 5.2 CLI (--crawlers)
+- [x] 5.2 CLI (--crawlers, --strategy)
 - [ ] 5.3 Logging
 - [ ] 4.6 Visualisation SharedMap
-- [ ] 9.8-9.9 Tests concurrence + couverture
+- [ ] 9.9-9.10 Tests concurrence + couverture
 
 ### Basse
 - [ ] 1.2 Labyrinth.Core separe
@@ -144,13 +148,14 @@
 
 ```bash
 dotnet build                                    # Build
-dotnet test                                     # Tests (115 tests)
+dotnet test                                     # Tests (126 tests)
 dotnet test --filter "FullyQualifiedName~TrainingServer"  # Tests serveur
 
 # Serveur entrainement
 cd Labyrinth.TrainingServer && dotnet run --urls "http://localhost:5123"
 
-# Client avec multi-crawlers
-dotnet run --project Labyrinth -- --crawlers 3
-dotnet run --project Labyrinth -- https://server.example guid --crawlers 2
+# Client avec multi-crawlers et strategie
+dotnet run --project Labyrinth -- --crawlers 3 --strategy bfs
+dotnet run --project Labyrinth -- --crawlers 1 --strategy random
+dotnet run --project Labyrinth -- https://server.example guid --crawlers 2 --strategy bfs
 ```
