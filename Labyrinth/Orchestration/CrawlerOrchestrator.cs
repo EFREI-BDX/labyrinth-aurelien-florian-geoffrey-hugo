@@ -1,4 +1,5 @@
 using Labyrinth.Crawl;
+using Labyrinth.Exploration;
 using Labyrinth.Items;
 using Labyrinth.Sys;
 using Labyrinth.Tiles;
@@ -76,7 +77,7 @@ public class CrawlerOrchestrator
     /// <returns>The result of the winning crawler, or null if none found the exit</returns>
     public async Task<CrawlerResult?> RunAsync(
         Func<Task<(ICrawler Crawler, Inventory Bag)>> crawlerFactory,
-        Func<ICrawler, RandExplorer> explorerFactory,
+        Func<ICrawler, IExplorer> explorerFactory,
         int crawlerCount,
         int maxSteps,
         CancellationToken externalCt = default)
@@ -139,7 +140,7 @@ public class CrawlerOrchestrator
     private async Task<CrawlerResult> RunSingleCrawlerAsync(
         int crawlerId,
         ICrawler crawler,
-        RandExplorer explorer,
+        IExplorer explorer,
         Inventory bag,
         int maxSteps,
         CancellationToken ct)
