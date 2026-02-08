@@ -1,11 +1,12 @@
 using Labyrinth.Crawl;
+using Labyrinth.Exploration;
 using Labyrinth.Items;
 using Labyrinth.Sys;
 using Labyrinth.Tiles;
 
 namespace Labyrinth
 {
-    public class RandExplorer(ICrawler crawler, IEnumRandomizer<RandExplorer.Actions> rnd)
+    public class RandExplorer(ICrawler crawler, IEnumRandomizer<RandExplorer.Actions> rnd) : IExplorer
     {
         private readonly ICrawler _crawler = crawler;
         private readonly IEnumRandomizer<Actions> _rnd = rnd;
