@@ -1,4 +1,4 @@
-﻿using Labyrinth;
+using Labyrinth;
 using Labyrinth.Build;
 using Labyrinth.Crawl;
 using Labyrinth.Sys;
@@ -344,6 +344,78 @@ public class ExplorerTest
         Assert.That(events.DirectionChangedCount, Is.EqualTo(7));
         Assert.That(events.PositionChangedCount, Is.EqualTo(8));
         Assert.That(events.LastArgs, Is.EqualTo((4, 1, Direction.East)));
+    }
+
+    [Test]
+    public async Task GetOut_WithCancellation_StopsExploring()
+    {
+        var test = NewExplorerFor("""
+            +---+
+            | x |
+            +---+
+            """,
+            out var events,
+            Actions.TurnLeft,
+            Actions.TurnLeft,
+            Actions.TurnLeft,
+            Actions.TurnLeft,
+            Actions.TurnLeft,
+            Actions.TurnLeft
+        );
+
+        using var cts = new CancellationTokenSource();
+        cts.Cancel(); // Cancel immediately
+
+        // When already cancelled, the loop exits early without throwing
+        // because we check IsCancellationRequested in the loop condition
+        var left = await test.GetOut(1000, null, cts.Token);
+
+        // Should have returned early
+        Assert.That(left, Is.EqualTo(1000));
+        Assert.That(events.DirectionChangedCount, Is.EqualTo(0));
+    }
+
+    [Test]
+    public async Task GetOut_AlreadyCancelled_ReturnsImmediately()
+    {
+        var test = NewExplorerFor("""
+            +---+
+            | x |
+            +---+
+            """,
+            out var events,
+            Actions.Walk
+        );
+
+        using var cts = new CancellationTokenSource();
+        cts.Cancel(); // Cancel before starting
+
+        // When already cancelled, it returns immediately without processing
+        var left = await test.GetOut(10, null, cts.Token);
+
+        Assert.That(left, Is.EqualTo(10));
+        Assert.That(events.DirectionChangedCount, Is.EqualTo(0));
+        Assert.That(events.PositionChangedCount, Is.EqualTo(0));
+    }
+
+    [Test]
+    public async Task GetOut_WithDefaultCancellationToken_WorksNormally()
+    {
+        var test = NewExplorerFor("""
+            | x |
+            |   |
+            +---+
+            """,
+            out var events,
+            Actions.Walk
+        );
+
+        // Using default CancellationToken should work like before
+        var left = await test.GetOut(10, null, default);
+
+        Assert.That(left, Is.EqualTo(10)); // Facing outside immediately
+        Assert.That(events.DirectionChangedCount, Is.EqualTo(0));
+        Assert.That(events.PositionChangedCount, Is.EqualTo(0));
     }
 
 }

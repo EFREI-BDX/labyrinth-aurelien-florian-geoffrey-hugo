@@ -1,11 +1,12 @@
-﻿using Labyrinth.Crawl;
+using Labyrinth.Crawl;
+using Labyrinth.Exploration;
 using Labyrinth.Items;
 using Labyrinth.Sys;
 using Labyrinth.Tiles;
 
 namespace Labyrinth
 {
-    public class RandExplorer(ICrawler crawler, IEnumRandomizer<RandExplorer.Actions> rnd)
+    public class RandExplorer(ICrawler crawler, IEnumRandomizer<RandExplorer.Actions> rnd) : IExplorer
     {
         private readonly ICrawler _crawler = crawler;
         private readonly IEnumRandomizer<Actions> _rnd = rnd;
@@ -18,13 +19,15 @@ namespace Labyrinth
 
         public ICrawler Crawler => _crawler;
 
-        public async Task<int> GetOut(int n, Inventory? bag = null)
+        public async Task<int> GetOut(int n, Inventory? bag = null, CancellationToken ct = default)
         {
             ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(n, 0, "n must be strictly positive");
 
             bag ??= new MyInventory();
-            for( ; n > 0 && await _crawler.FacingTileType != typeof(Outside); n--)
+            for( ; n > 0 && !ct.IsCancellationRequested && await _crawler.FacingTileType != typeof(Outside); n--)
             {
+                ct.ThrowIfCancellationRequested();
+                
                 EventHandler<CrawlingEventArgs>? changeEvent;
 
                 if ((await _crawler.FacingTileType) != typeof(Wall)

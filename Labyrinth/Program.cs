@@ -1,58 +1,118 @@
-﻿using Labyrinth;
+using Labyrinth;
 using Labyrinth.ApiClient;
 using Labyrinth.Build;
 using Labyrinth.Crawl;
+using Labyrinth.Exploration;
 using Labyrinth.Items;
+using Labyrinth.Orchestration;
+using Labyrinth.Pathfinding;
 using Labyrinth.Tiles;
 using Labyrinth.Sys;
-using Dto=ApiTypes;
+using Dto = ApiTypes;
 using System.Text.Json;
 
+// Parse command line arguments
+var config = ParseArguments(args);
+
+// Crawler colors for multi-crawler display
+var crawlerColors = new[] { ConsoleColor.Cyan, ConsoleColor.Yellow, ConsoleColor.Magenta };
+var consoleLock = new object();
+
 const int OffsetY = 2;
+const int MaxSteps = 3000;
 
 char DirToChar(Direction dir) =>
     "^<v>"[dir.DeltaX * dir.DeltaX + dir.DeltaX + dir.DeltaY + 1];
 
 var TileToChar = new Dictionary<Type, char>
 {
-    [typeof(Room   )] = ' ',
-    [typeof(Wall   )] = '#',
-    [typeof(Door   )] = '/'
+    [typeof(Room)] = ' ',
+    [typeof(Wall)] = '#',
+    [typeof(Door)] = '/'
 };
 
-void DrawExplorer(object? sender, CrawlingEventArgs e)
-{
-    var crawler = ((RandExplorer)sender!).Crawler;
-    var facingTileType = crawler.FacingTileType.Result;
+// Track each crawler's previous position for clearing
+var crawlerPrevPositions = new Dictionary<int, (int X, int Y)>();
 
-    if (facingTileType != typeof(Outside))
+void DrawExplorer(int crawlerId, object? sender, CrawlingEventArgs e)
+{
+    var crawler = ((IExplorer)sender!).Crawler;
+    var facingTileType = crawler.FacingTileType.Result;
+    var color = crawlerColors[(crawlerId - 1) % crawlerColors.Length];
+
+    lock (consoleLock)
     {
-        Console.SetCursorPosition(
-            e.X + e.Direction.DeltaX, 
-            e.Y + e.Direction.DeltaY + OffsetY
-        );
-        Console.Write(TileToChar[facingTileType]);
+        var originalColor = Console.ForegroundColor;
+        Console.ForegroundColor = color;
+
+        if (facingTileType != typeof(Outside) && TileToChar.ContainsKey(facingTileType))
+        {
+            Console.SetCursorPosition(
+                e.X + e.Direction.DeltaX,
+                e.Y + e.Direction.DeltaY + OffsetY
+            );
+            Console.Write(TileToChar[facingTileType]);
+        }
+        Console.SetCursorPosition(e.X, e.Y + OffsetY);
+        Console.Write(DirToChar(e.Direction));
+        Console.SetCursorPosition(0, crawlerId - 1);
+
+        if (crawler is ClientCrawler cc)
+        {
+            Console.Write($"Crawler {crawlerId}: Bag = {cc.Bag.ItemTypes.Count()} item(s)    ");
+        }
+        else
+        {
+            Console.Write($"Crawler {crawlerId}: exploring...    ");
+        }
+
+        Console.ForegroundColor = originalColor;
+        Thread.Sleep(50);
     }
-    Console.SetCursorPosition(e.X, e.Y + OffsetY);
-    Console.Write(DirToChar(e.Direction));
-    Console.SetCursorPosition(0, 0);
-    if(crawler is ClientCrawler cc)
+}
+
+void OnPositionChanged(int crawlerId, object? sender, CrawlingEventArgs e)
+{
+    lock (consoleLock)
     {
-        Console.WriteLine($"Bag : { cc.Bag.ItemTypes.Count() } item(s)");
+        if (crawlerPrevPositions.TryGetValue(crawlerId, out var prev))
+        {
+            Console.SetCursorPosition(prev.X, prev.Y);
+            Console.Write(' ');
+        }
+        DrawExplorer(crawlerId, sender, e);
+        crawlerPrevPositions[crawlerId] = (e.X, e.Y + OffsetY);
     }
-    Thread.Sleep(100);
+}
+
+// Factory to create the appropriate explorer based on strategy
+IExplorer CreateExplorer(ICrawler crawler, int crawlerId, ExplorationStrategy strategy)
+{
+    IExplorer explorer = strategy switch
+    {
+        ExplorationStrategy.Bfs => new BfsExplorer(crawler, new BfsPathfinder()),
+        ExplorationStrategy.Random => new RandExplorer(crawler, new BasicEnumRandomizer<RandExplorer.Actions>()),
+        _ => new BfsExplorer(crawler, new BfsPathfinder())
+    };
+    
+    explorer.DirectionChanged += (s, e) => DrawExplorer(crawlerId, s, e);
+    explorer.PositionChanged += (s, e) => OnPositionChanged(crawlerId, s, e);
+    crawlerPrevPositions[crawlerId] = (crawler.X, crawler.Y + OffsetY);
+    
+    return explorer;
 }
 
 Labyrinth.Labyrinth labyrinth;
-ICrawler crawler;
-Inventory? bag = null;
 ContestSession? contest = null;
+int crawlerIndex = 0;
 
-if (args.Length < 2)
+if (config.ServerUrl is null)
 {
-    Console.WriteLine(
-        "Commande line usage : https://apiserver.example appKeyGuid [settings.json]"
-    );
+    // Local mode
+    var strategyName = config.Strategy == ExplorationStrategy.Bfs ? "BFS" : "Random";
+    Console.WriteLine($"Local mode - {config.CrawlerCount} crawler(s), {strategyName} strategy, {MaxSteps} max steps");
+    Console.WriteLine("Usage: <serverUrl> <appKey> [settings.json] [--crawlers <1-3>] [--strategy <bfs|random>]");
+
     labyrinth = new Labyrinth.Labyrinth(new AsciiParser("""
         +--+--------+
         |  /        |
@@ -64,44 +124,200 @@ if (args.Length < 2)
         |           |
         +-----------+
         """));
-    crawler = labyrinth.NewCrawler();
+
+    var orchestrator = new CrawlerOrchestrator(config.CrawlerCount);
+
+    orchestrator.CrawlerStarted += (s, e) =>
+    {
+        lock (consoleLock)
+        {
+            var color = crawlerColors[(e.CrawlerId - 1) % crawlerColors.Length];
+            Console.ForegroundColor = color;
+            Console.SetCursorPosition(0, e.CrawlerId - 1);
+            Console.Write($"Crawler {e.CrawlerId}: started at ({e.Crawler.X}, {e.Crawler.Y})    ");
+            Console.ResetColor();
+        }
+    };
+
+    orchestrator.CrawlerFinished += (s, result) =>
+    {
+        lock (consoleLock)
+        {
+            var color = crawlerColors[(result.CrawlerId - 1) % crawlerColors.Length];
+            Console.ForegroundColor = color;
+            Console.SetCursorPosition(0, result.CrawlerId - 1);
+            var status = result.FoundExit ? "FOUND EXIT!" :
+                         result.WasCancelled ? "cancelled" : "exhausted";
+            Console.Write($"Crawler {result.CrawlerId}: {status} (steps left: {result.StepsRemaining})    ");
+            Console.ResetColor();
+        }
+    };
+
+    Console.Clear();
+    Console.SetCursorPosition(0, OffsetY);
+    Console.WriteLine(labyrinth);
+
+    var winner = await orchestrator.RunAsync(
+        crawlerFactory: () =>
+        {
+            var crawler = labyrinth.NewCrawler();
+            return Task.FromResult<(ICrawler, Inventory)>((crawler, new MyInventory()));
+        },
+        explorerFactory: crawler =>
+        {
+            var id = Interlocked.Increment(ref crawlerIndex);
+            return CreateExplorer(crawler, id, config.Strategy);
+        },
+        crawlerCount: config.CrawlerCount,
+        maxSteps: MaxSteps
+    );
+
+    Console.SetCursorPosition(0, OffsetY + labyrinth.Height + 2);
+    if (winner is not null)
+    {
+        Console.ForegroundColor = crawlerColors[(winner.CrawlerId - 1) % crawlerColors.Length];
+        Console.WriteLine($"Crawler {winner.CrawlerId} won! Found exit with {winner.StepsRemaining} steps remaining.");
+        Console.ResetColor();
+    }
+    else
+    {
+        Console.WriteLine("No crawler found the exit.");
+    }
 }
 else
 {
+    // Contest mode
     Dto.Settings? settings = null;
 
-    if (args.Length > 2)
+    if (config.SettingsPath is not null)
     {
-        settings = JsonSerializer.Deserialize<Dto.Settings>(File.ReadAllText(args[2]));
+        settings = JsonSerializer.Deserialize<Dto.Settings>(File.ReadAllText(config.SettingsPath));
     }
-    contest = await ContestSession.Open(new Uri(args[0]), Guid.Parse(args[1]), settings);
-    labyrinth = new (contest.Builder);
-    crawler = await contest.NewCrawler();
-    bag = contest.Bags.First();
+
+    contest = await ContestSession.Open(config.ServerUrl, config.AppKey!.Value, settings);
+    labyrinth = new(contest.Builder);
+
+    var orchestrator = new CrawlerOrchestrator(config.CrawlerCount);
+
+    orchestrator.CrawlerStarted += (s, e) =>
+    {
+        lock (consoleLock)
+        {
+            var color = crawlerColors[(e.CrawlerId - 1) % crawlerColors.Length];
+            Console.ForegroundColor = color;
+            Console.SetCursorPosition(0, e.CrawlerId - 1);
+            Console.Write($"Crawler {e.CrawlerId}: started at ({e.Crawler.X}, {e.Crawler.Y})    ");
+            Console.ResetColor();
+        }
+    };
+
+    orchestrator.CrawlerFinished += (s, result) =>
+    {
+        lock (consoleLock)
+        {
+            var color = crawlerColors[(result.CrawlerId - 1) % crawlerColors.Length];
+            Console.ForegroundColor = color;
+            Console.SetCursorPosition(0, result.CrawlerId - 1);
+            var status = result.FoundExit ? "FOUND EXIT!" :
+                         result.WasCancelled ? "cancelled" : "exhausted";
+            Console.Write($"Crawler {result.CrawlerId}: {status} (steps left: {result.StepsRemaining})    ");
+            Console.ResetColor();
+        }
+    };
+
+    Console.Clear();
+    Console.SetCursorPosition(0, OffsetY);
+    Console.WriteLine(labyrinth);
+
+    var bagIndex = 0;
+    var winner = await orchestrator.RunAsync(
+        crawlerFactory: async () =>
+        {
+            var crawler = await contest.NewCrawler();
+            var bag = contest.Bags.ElementAt(bagIndex++);
+            return (crawler, bag);
+        },
+        explorerFactory: crawler =>
+        {
+            var id = Interlocked.Increment(ref crawlerIndex);
+            return CreateExplorer(crawler, id, config.Strategy);
+        },
+        crawlerCount: config.CrawlerCount,
+        maxSteps: MaxSteps
+    );
+
+    Console.SetCursorPosition(0, OffsetY + 20);
+    if (winner is not null)
+    {
+        Console.ForegroundColor = crawlerColors[(winner.CrawlerId - 1) % crawlerColors.Length];
+        Console.WriteLine($"Crawler {winner.CrawlerId} won! Found exit with {winner.StepsRemaining} steps remaining.");
+        Console.ResetColor();
+    }
+    else
+    {
+        Console.WriteLine("No crawler found the exit.");
+    }
+
+    await contest.Close();
 }
 
-var prevX = crawler.X;
-var prevY = crawler.Y;
-var explorer = new RandExplorer(
-    crawler, 
-    new BasicEnumRandomizer<RandExplorer.Actions>()
-);
-
-explorer.DirectionChanged += DrawExplorer;
-explorer.PositionChanged  += (s, e) =>
+// Argument parsing helper
+static AppConfig ParseArguments(string[] args)
 {
-    Console.SetCursorPosition(prevX, prevY);
-    Console.Write(' ');
-    DrawExplorer(s, e);
-    (prevX, prevY) = (e.X, e.Y + OffsetY);
-};
+    var config = new AppConfig();
 
-Console.Clear();
-Console.SetCursorPosition(0, OffsetY);
-Console.WriteLine(labyrinth);
-await explorer.GetOut(3000, bag);
+    for (int i = 0; i < args.Length; i++)
+    {
+        if (args[i] == "--crawlers" && i + 1 < args.Length)
+        {
+            if (int.TryParse(args[i + 1], out var count) && count >= 1 && count <= 3)
+            {
+                config.CrawlerCount = count;
+            }
+            else
+            {
+                Console.WriteLine("Warning: --crawlers must be 1-3. Using default (1).");
+            }
+            i++; // Skip the value
+        }
+        else if (args[i] == "--strategy" && i + 1 < args.Length)
+        {
+            config.Strategy = args[i + 1].ToLowerInvariant() switch
+            {
+                "bfs" => ExplorationStrategy.Bfs,
+                "random" or "rand" => ExplorationStrategy.Random,
+                _ => ExplorationStrategy.Bfs
+            };
+            i++; // Skip the value
+        }
+        else if (config.ServerUrl is null && Uri.TryCreate(args[i], UriKind.Absolute, out var uri))
+        {
+            config.ServerUrl = uri;
+        }
+        else if (config.ServerUrl is not null && config.AppKey is null && Guid.TryParse(args[i], out var guid))
+        {
+            config.AppKey = guid;
+        }
+        else if (config.ServerUrl is not null && config.AppKey is not null && config.SettingsPath is null && !args[i].StartsWith("--"))
+        {
+            config.SettingsPath = args[i];
+        }
+    }
 
-if (contest is not null)
+    return config;
+}
+
+enum ExplorationStrategy
 {
-    await contest.Close();
+    Bfs,
+    Random
+}
+
+record AppConfig
+{
+    public Uri? ServerUrl { get; set; }
+    public Guid? AppKey { get; set; }
+    public string? SettingsPath { get; set; }
+    public int CrawlerCount { get; set; } = 1;
+    public ExplorationStrategy Strategy { get; set; } = ExplorationStrategy.Bfs;
 }
