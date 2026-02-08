@@ -2,8 +2,10 @@ using Labyrinth;
 using Labyrinth.ApiClient;
 using Labyrinth.Build;
 using Labyrinth.Crawl;
+using Labyrinth.Exploration;
 using Labyrinth.Items;
 using Labyrinth.Orchestration;
+using Labyrinth.Pathfinding;
 using Labyrinth.Tiles;
 using Labyrinth.Sys;
 using Dto = ApiTypes;
@@ -34,7 +36,7 @@ var crawlerPrevPositions = new Dictionary<int, (int X, int Y)>();
 
 void DrawExplorer(int crawlerId, object? sender, CrawlingEventArgs e)
 {
-    var crawler = ((RandExplorer)sender!).Crawler;
+    var crawler = ((IExplorer)sender!).Crawler;
     var facingTileType = crawler.FacingTileType.Result;
     var color = crawlerColors[(crawlerId - 1) % crawlerColors.Length];
 
@@ -83,6 +85,23 @@ void OnPositionChanged(int crawlerId, object? sender, CrawlingEventArgs e)
     }
 }
 
+// Factory to create the appropriate explorer based on strategy
+IExplorer CreateExplorer(ICrawler crawler, int crawlerId, ExplorationStrategy strategy)
+{
+    IExplorer explorer = strategy switch
+    {
+        ExplorationStrategy.Bfs => new BfsExplorer(crawler, new BfsPathfinder()),
+        ExplorationStrategy.Random => new RandExplorer(crawler, new BasicEnumRandomizer<RandExplorer.Actions>()),
+        _ => new BfsExplorer(crawler, new BfsPathfinder())
+    };
+    
+    explorer.DirectionChanged += (s, e) => DrawExplorer(crawlerId, s, e);
+    explorer.PositionChanged += (s, e) => OnPositionChanged(crawlerId, s, e);
+    crawlerPrevPositions[crawlerId] = (crawler.X, crawler.Y + OffsetY);
+    
+    return explorer;
+}
+
 Labyrinth.Labyrinth labyrinth;
 ContestSession? contest = null;
 int crawlerIndex = 0;
@@ -90,8 +109,9 @@ int crawlerIndex = 0;
 if (config.ServerUrl is null)
 {
     // Local mode
-    Console.WriteLine($"Local mode - {config.CrawlerCount} crawler(s), {MaxSteps} max steps");
-    Console.WriteLine("Usage: <serverUrl> <appKey> [settings.json] [--crawlers <1-3>]");
+    var strategyName = config.Strategy == ExplorationStrategy.Bfs ? "BFS" : "Random";
+    Console.WriteLine($"Local mode - {config.CrawlerCount} crawler(s), {strategyName} strategy, {MaxSteps} max steps");
+    Console.WriteLine("Usage: <serverUrl> <appKey> [settings.json] [--crawlers <1-3>] [--strategy <bfs|random>]");
 
     labyrinth = new Labyrinth.Labyrinth(new AsciiParser("""
         +--+--------+
@@ -146,11 +166,7 @@ if (config.ServerUrl is null)
         explorerFactory: crawler =>
         {
             var id = Interlocked.Increment(ref crawlerIndex);
-            var explorer = new RandExplorer(crawler, new BasicEnumRandomizer<RandExplorer.Actions>());
-            explorer.DirectionChanged += (s, e) => DrawExplorer(id, s, e);
-            explorer.PositionChanged += (s, e) => OnPositionChanged(id, s, e);
-            crawlerPrevPositions[id] = (crawler.X, crawler.Y + OffsetY);
-            return explorer;
+            return CreateExplorer(crawler, id, config.Strategy);
         },
         crawlerCount: config.CrawlerCount,
         maxSteps: MaxSteps
@@ -224,11 +240,7 @@ else
         explorerFactory: crawler =>
         {
             var id = Interlocked.Increment(ref crawlerIndex);
-            var explorer = new RandExplorer(crawler, new BasicEnumRandomizer<RandExplorer.Actions>());
-            explorer.DirectionChanged += (s, e) => DrawExplorer(id, s, e);
-            explorer.PositionChanged += (s, e) => OnPositionChanged(id, s, e);
-            crawlerPrevPositions[id] = (crawler.X, crawler.Y + OffsetY);
-            return explorer;
+            return CreateExplorer(crawler, id, config.Strategy);
         },
         crawlerCount: config.CrawlerCount,
         maxSteps: MaxSteps
@@ -268,6 +280,16 @@ static AppConfig ParseArguments(string[] args)
             }
             i++; // Skip the value
         }
+        else if (args[i] == "--strategy" && i + 1 < args.Length)
+        {
+            config.Strategy = args[i + 1].ToLowerInvariant() switch
+            {
+                "bfs" => ExplorationStrategy.Bfs,
+                "random" or "rand" => ExplorationStrategy.Random,
+                _ => ExplorationStrategy.Bfs
+            };
+            i++; // Skip the value
+        }
         else if (config.ServerUrl is null && Uri.TryCreate(args[i], UriKind.Absolute, out var uri))
         {
             config.ServerUrl = uri;
@@ -285,10 +307,17 @@ static AppConfig ParseArguments(string[] args)
     return config;
 }
 
+enum ExplorationStrategy
+{
+    Bfs,
+    Random
+}
+
 record AppConfig
 {
     public Uri? ServerUrl { get; set; }
     public Guid? AppKey { get; set; }
     public string? SettingsPath { get; set; }
     public int CrawlerCount { get; set; } = 1;
+    public ExplorationStrategy Strategy { get; set; } = ExplorationStrategy.Bfs;
 }
